@@ -63,10 +63,32 @@ export const env = createEnv({
     LANGFUSE_DEFAULT_PROJECT_ROLE: z
       .enum(["OWNER", "ADMIN", "MEMBER", "VIEWER"])
       .optional(),
+    LANGFUSE_BLOCKED_USERIDS_CHATCOMPLETION: z
+      .string()
+      .optional()
+      .transform((s) => {
+        const map = new Map();
+        if (!s) return map;
+        s.split(",").forEach((entry) => {
+          const idx = entry.indexOf(":");
+          if (idx !== -1) {
+            map.set(entry.slice(0, idx).trim(), entry.slice(idx + 1).trim());
+          } else {
+            map.set(entry.trim(), "");
+          }
+        });
+        return map;
+      }),
     LANGFUSE_CSP_ENFORCE_HTTPS: z
       .enum(["true", "false"])
       .optional()
       .default("false"),
+    LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS: z
+      .string()
+      .optional()
+      .transform((s) =>
+        s ? s.split(",").map((h) => h.trim().toLowerCase()) : []
+      ),
     // Telemetry
     TELEMETRY_ENABLED: z.enum(["true", "false"]).optional(),
     // AUTH
@@ -472,6 +494,8 @@ export const env = createEnv({
     LANGFUSE_DEFAULT_ORG_ROLE: process.env.LANGFUSE_DEFAULT_ORG_ROLE,
     LANGFUSE_DEFAULT_PROJECT_ID: process.env.LANGFUSE_DEFAULT_PROJECT_ID,
     LANGFUSE_DEFAULT_PROJECT_ROLE: process.env.LANGFUSE_DEFAULT_PROJECT_ROLE,
+    LANGFUSE_BLOCKED_USERIDS_CHATCOMPLETION: process.env.LANGFUSE_BLOCKED_USERIDS_CHATCOMPLETION,
+    LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS: process.env.LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS,
     // AUTH
     AUTH_GOOGLE_CLIENT_ID: process.env.AUTH_GOOGLE_CLIENT_ID,
     AUTH_GOOGLE_CLIENT_SECRET: process.env.AUTH_GOOGLE_CLIENT_SECRET,
