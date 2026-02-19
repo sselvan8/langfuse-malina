@@ -61,6 +61,7 @@ import { projectRoleAccessRights } from "@/src/features/rbac/constants/projectAc
 import { hasEntitlementBasedOnPlan } from "@/src/features/entitlements/server/hasEntitlement";
 import { getSSOBlockedDomains } from "@/src/features/auth-credentials/server/signupApiHandler";
 import { createSupportEmailHash } from "@/src/features/support-chat/createSupportEmailHash";
+import { isEmailInCustomOrgCreatorWhitelist } from "@/src/features/organizations/server/customOrgCreationMiddleware";
 
 function canCreateOrganizations(userEmail: string | null): boolean {
   const instancePlan = getSelfHostedInstancePlanServerSide();
@@ -80,6 +81,17 @@ function canCreateOrganizations(userEmail: string | null): boolean {
   const allowedOrgCreators =
     env.LANGFUSE_ALLOWED_ORGANIZATION_CREATORS.toLowerCase().split(",");
   return allowedOrgCreators.includes(userEmail.toLowerCase());
+}
+
+function canCreateOrganizationsWithCustomCheck(userEmail: string | null): boolean {
+  // First check the licensed entitlement logic
+  const hasBasePermission = canCreateOrganizations(userEmail);
+
+  // If base permission fails, return false
+  if (!hasBasePermission) return false;
+
+  // Then check custom whitelist (your additional layer)
+  return isEmailInCustomOrgCreatorWhitelist(userEmail);
 }
 
 const staticProviders: Provider[] = [
@@ -140,7 +152,7 @@ const staticProviders: Provider[] = [
         image: dbUser.image,
         emailVerified: dbUser.emailVerified?.toISOString(),
         featureFlags: parseFlags(dbUser.featureFlags),
-        canCreateOrganizations: canCreateOrganizations(dbUser.email),
+        canCreateOrganizations: canCreateOrganizationsWithCustomCheck(dbUser.email),
         organizations: [],
       };
 
@@ -611,7 +623,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
     },
     callbacks: {
       async session({ session, token }): Promise<Session> {
-        return instrumentAsync({ name: "next-auth-session" }, async (span) => {
+        return instrumentAsync({ name: "next-auth-session" }, async () => {
           const dbUser = await prisma.user.findUnique({
             where: {
               email: token.email!.toLowerCase(),
@@ -624,7 +636,6 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
               emailVerified: true,
               featureFlags: true,
               admin: true,
-              v4BetaEnabled: true,
               organizationMemberships: {
                 include: {
                   organization: {
@@ -648,9 +659,6 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
             },
           });
 
-          span.setAttribute("langfuse.user.email", dbUser?.email ?? "");
-          span.setAttribute("langfuse.user.id", dbUser?.id ?? "");
-
           return {
             ...session,
             environment: {
@@ -672,8 +680,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                       : undefined,
                     image: dbUser.image,
                     admin: dbUser.admin,
-                    v4BetaEnabled: dbUser.v4BetaEnabled,
-                    canCreateOrganizations: canCreateOrganizations(
+                    canCreateOrganizations: canCreateOrganizationsWithCustomCheck(
                       dbUser.email,
                     ),
                     organizations: dbUser.organizationMemberships.map(
@@ -706,7 +713,6 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                                 name: project.name,
                                 role: projectRole,
                                 retentionDays: project.retentionDays,
-                                hasTraces: project.hasTraces,
                                 deletedAt: project.deletedAt,
                                 metadata:
                                   (project.metadata as Record<
