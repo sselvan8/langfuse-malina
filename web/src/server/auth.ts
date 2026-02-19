@@ -646,6 +646,14 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                             equals: null,
                           },
                         },
+                        select: {
+                          id: true,
+                          name: true,
+                          retentionDays: true,
+                          deletedAt: true,
+                          metadata: true,
+                          hasTraces: true,
+                        },
                       },
                     },
                   },
@@ -714,6 +722,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                                 role: projectRole,
                                 retentionDays: project.retentionDays,
                                 deletedAt: project.deletedAt,
+                                hasTraces: project.hasTraces,
                                 metadata:
                                   (project.metadata as Record<
                                     string,
