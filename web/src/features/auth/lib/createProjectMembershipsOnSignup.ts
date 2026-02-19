@@ -41,7 +41,9 @@ export async function createProjectMembershipsOnSignup(user: {
     }
 
     // self-hosted: LANGFUSE_DEFAULT_ORG_ID (supports comma-separated list of org IDs)
-    const defaultOrgIds = env.LANGFUSE_DEFAULT_ORG_ID ?? [];
+    const defaultOrgIds: string[] = env.LANGFUSE_DEFAULT_ORG_ID
+      ? env.LANGFUSE_DEFAULT_ORG_ID.split(",").map((s) => s.trim()).filter(Boolean)
+      : []; 
     const defaultOrgs =
       defaultOrgIds.length > 0
         ? await prisma.organization.findMany({
@@ -72,7 +74,9 @@ export async function createProjectMembershipsOnSignup(user: {
     }
 
     // self-hosted: LANGFUSE_DEFAULT_PROJECT_ID (supports comma-separated list of project IDs)
-    const defaultProjectIds = env.LANGFUSE_DEFAULT_PROJECT_ID ?? [];
+    const defaultProjectIds: string[] = env.LANGFUSE_DEFAULT_PROJECT_ID
+      ? env.LANGFUSE_DEFAULT_PROJECT_ID.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
     const defaultProjects =
       defaultProjectIds.length > 0
         ? await prisma.project.findMany({
