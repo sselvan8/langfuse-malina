@@ -54,33 +54,12 @@ export const env = createEnv({
       required_error:
         "A strong Salt is required to encrypt API keys securely. See: https://langfuse.com/self-hosting#deploy-the-container",
     }),
-    // Add newly signed up users to default org(s) and/or project(s) with role
-    // Supports comma-separated IDs for multiple orgs/projects (e.g., "org1,org2,org3")
-    LANGFUSE_DEFAULT_ORG_ID: z
-      .string()
-      .optional()
-      .transform((val) =>
-        val
-          ? val
-              .split(",")
-              .map((id) => id.trim())
-              .filter(Boolean)
-          : undefined,
-      ),
+    // Add newly signed up users to default org and/or project with role
+    LANGFUSE_DEFAULT_ORG_ID: z.string().optional(),
     LANGFUSE_DEFAULT_ORG_ROLE: z
       .enum(["OWNER", "ADMIN", "MEMBER", "VIEWER", "NONE"])
       .optional(),
-    LANGFUSE_DEFAULT_PROJECT_ID: z
-      .string()
-      .optional()
-      .transform((val) =>
-        val
-          ? val
-              .split(",")
-              .map((id) => id.trim())
-              .filter(Boolean)
-          : undefined,
-      ),
+    LANGFUSE_DEFAULT_PROJECT_ID: z.string().optional(),
     LANGFUSE_DEFAULT_PROJECT_ROLE: z
       .enum(["OWNER", "ADMIN", "MEMBER", "VIEWER"])
       .optional(),
@@ -233,14 +212,6 @@ export const env = createEnv({
     OTEL_SERVICE_NAME: z.string().default("web"),
     OTEL_TRACE_SAMPLING_RATIO: z.coerce.number().gt(0).lte(1).default(1),
 
-    // OTel Masking
-    LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS: z
-      .string()
-      .optional()
-      .transform((s) =>
-        s ? s.split(",").map((h) => h.toLowerCase().trim()) : [],
-      ),
-
     // clickhouse
     CLICKHOUSE_URL: z.string().url(),
     CLICKHOUSE_CLUSTER_NAME: z.string().default("default"),
@@ -370,6 +341,18 @@ export const env = createEnv({
     LANGFUSE_AI_FEATURES_SECRET_KEY: z.string().optional(),
     LANGFUSE_AI_FEATURES_PROJECT_ID: z.string().optional(),
 
+    CUSTOM_ORG_CREATOR_WHITELIST: z
+      .string()
+      .optional()
+      .refine((value) => {
+        if (!value) return true;
+        const creators = value.split(",");
+        const emailSchema = z.string().email();
+        return creators.every((creator) =>
+          emailSchema.safeParse(creator.trim()).success
+        );
+      }, "CUSTOM_ORG_CREATOR_WHITELIST must be a comma-separated list of valid email addresses"),
+	
     // API Performance Flags
     // Enable Redis-based tracking of projects using OTEL API to optimize ClickHouse queries.
     // When enabled, projects ingesting via OTEL API skip the FINAL modifier on some observations queries for better performance.
@@ -423,6 +406,10 @@ export const env = createEnv({
         }
         return map;
       }),
+    
+     LANGFUSE_ENABLE_QUERY_OPTIMIZATION_SHADOW_TEST: z
+      .enum(["true", "false"])
+      .default("false"),
   },
 
   /**
@@ -639,9 +626,6 @@ export const env = createEnv({
     OTEL_SERVICE_NAME: process.env.OTEL_SERVICE_NAME,
     OTEL_TRACE_SAMPLING_RATIO: process.env.OTEL_TRACE_SAMPLING_RATIO,
 
-    LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS:
-      process.env.LANGFUSE_INGESTION_MASKING_PROPAGATED_HEADERS,
-
     // S3 media upload
     LANGFUSE_S3_MEDIA_MAX_CONTENT_LENGTH:
       process.env.LANGFUSE_S3_MEDIA_MAX_CONTENT_LENGTH,
@@ -752,6 +736,8 @@ export const env = createEnv({
     // Langfuse Tracing AI Features
     LANGFUSE_AI_FEATURES_HOST: process.env.LANGFUSE_AI_FEATURES_HOST,
 
+    CUSTOM_ORG_CREATOR_WHITELIST: process.env.CUSTOM_ORG_CREATOR_WHITELIST,
+	  
     // Api Performance Flags
     LANGFUSE_API_CLICKHOUSE_PROPAGATE_OBSERVATIONS_TIME_BOUNDS:
       process.env.LANGFUSE_API_CLICKHOUSE_PROPAGATE_OBSERVATIONS_TIME_BOUNDS,
@@ -781,6 +767,8 @@ export const env = createEnv({
       process.env.LANGFUSE_ENABLE_EVENTS_TABLE_V2_APIS,
     LANGFUSE_BLOCKED_USERIDS_CHATCOMPLETION:
       process.env.LANGFUSE_BLOCKED_USERIDS_CHATCOMPLETION,
+    LANGFUSE_ENABLE_QUERY_OPTIMIZATION_SHADOW_TEST:
+      process.env.LANGFUSE_ENABLE_QUERY_OPTIMIZATION_SHADOW_TEST,
   },
   // Skip validation in Docker builds
   // DOCKER_BUILD is set in Dockerfile
