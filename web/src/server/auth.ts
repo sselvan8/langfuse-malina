@@ -435,6 +435,15 @@ if (
         token_endpoint_auth_method: env.AUTH_AZURE_AD_CLIENT_AUTH_METHOD,
       },
       ...(env.AUTH_AZURE_AD_CHECKS ? { checks: env.AUTH_AZURE_AD_CHECKS } : {}),
+      // Suppress Azure AD profile photos – large URLs inflate response headers in ingress
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name ?? null,
+          email: profile.email ?? profile.preferred_username ?? null,
+          image: null,
+        };
+      },
     }),
   );
 
@@ -701,7 +710,6 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
               id: true,
               name: true,
               email: true,
-              image: true,
               emailVerified: true,
               featureFlags: true,
               admin: true,
@@ -755,7 +763,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                     emailSupportHash: dbUser.email
                       ? createSupportEmailHash(dbUser.email)
                       : undefined,
-                    image: dbUser.image,
+                    image: null,
                     admin: dbUser.admin,
                     canCreateOrganizations: canCreateOrganizationsWithCustomCheck(
                       dbUser.email,
