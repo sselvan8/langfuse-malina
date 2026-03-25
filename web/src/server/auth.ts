@@ -162,6 +162,7 @@ const staticProviders: Provider[] = [
         emailVerified: dbUser.emailVerified?.toISOString(),
         featureFlags: parseFlags(dbUser.featureFlags),
         canCreateOrganizations: canCreateOrganizationsWithCustomCheck(dbUser.email),
+        canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(dbUser.email),
         organizations: [],
       };
 
@@ -757,6 +758,9 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                     image: dbUser.image,
                     admin: dbUser.admin,
                     canCreateOrganizations: canCreateOrganizationsWithCustomCheck(
+                      dbUser.email,
+                    ),
+                    canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(
                       dbUser.email,
                     ),
                     organizations: dbUser.organizationMemberships.map(

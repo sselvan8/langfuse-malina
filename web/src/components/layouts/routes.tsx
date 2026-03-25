@@ -19,6 +19,7 @@ import {
   ClipboardPen,
   Clock,
   Beaker,
+  Globe2,
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { type Entitlement } from "@/src/features/entitlements/constants/entitlements";
@@ -60,6 +61,7 @@ export type Route = {
   productModule?: ProductModule; // Product module this route belongs to. Used to show/hide modules via ui customization.
   show?: (p: {
     organization: User["organizations"][number] | undefined;
+    canViewOrgDashboard?: boolean;
   }) => boolean;
   group?: RouteGroup; // group this route belongs to (within a section)
 };
@@ -97,6 +99,13 @@ export const ROUTES: Route[] = [
     icon: LayoutDashboard,
     productModule: "dashboards",
     section: RouteSection.Main,
+  },
+  {
+    title: "Org Dashboard",
+    pathname: "/admin/org-dashboard",
+    icon: Globe2,
+    section: RouteSection.Main,
+    show: ({ canViewOrgDashboard }) => Boolean(canViewOrgDashboard),
   },
   {
     title: "Tracing",
