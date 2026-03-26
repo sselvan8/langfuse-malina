@@ -436,13 +436,15 @@ if (
       },
       ...(env.AUTH_AZURE_AD_CHECKS ? { checks: env.AUTH_AZURE_AD_CHECKS } : {}),
       // Suppress Azure AD profile photos – large URLs inflate response headers in ingress
+      // The extra User fields (canCreateOrganizations, etc.) are computed in the session callback;
+      // the adapter only persists id/name/email/image from this return value.
       profile(profile) {
         return {
           id: profile.sub,
           name: profile.name ?? null,
           email: profile.email ?? profile.preferred_username ?? null,
           image: null,
-        };
+        } as unknown as User;
       },
     }),
   );
