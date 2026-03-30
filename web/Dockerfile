@@ -1,12 +1,12 @@
 # The node alpine image is available here: https://github.com/nodejs/docker-node
 FROM --platform=${TARGETPLATFORM:-linux/amd64} node:24-alpine AS alpine
+FROM migrate/migrate:v4.19.1 AS migrate-bin
+FROM node:24-alpine AS proxy-base
 
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 
-ARG HTTP_PROXY=http://proxy-chain.intel.com:915
-ARG HTTPS_PROXY=http://proxy-chain.intel.com:915
-ARG NO_PROXY=localhost,127.0.0.1,::1,.intel.com
-
-# Persist to runtime env (both cases for broad tool compatibility)
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     NO_PROXY=${NO_PROXY} \
@@ -14,12 +14,17 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
     no_proxy=${NO_PROXY}
 
+# npm must be explicitly configured behind corporate proxies
+RUN npm config set proxy "$HTTP_PROXY" \
+ && npm config set https-proxy "$HTTPS_PROXY" \
+ && npm config set strict-ssl false
+
 # It's important to update the index before installing packages to ensure you're getting the latest versions.
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk update && apk upgrade --no-cache libcrypto3 libssl3 libc6-compat busybox ssl_client zlib
 
-FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine AS base
-RUN npm install turbo@2.8.13 --global
+FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine AS build-base
+RUN npm install turbo@2.8.20 --global
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
@@ -141,9 +146,8 @@ RUN if [ -n "$NEXT_PUBLIC_LANGFUSE_CLOUD_REGION" ]; then \
     npm install --no-package-lock --no-save dd-trace@5.65.0; \
     fi
 
-RUN MIGRATE_TARGET_ARCH=$(echo ${TARGETPLATFORM:-linux/amd64} | sed 's/\//-/g') && \
-    wget -q -O- https://github.com/golang-migrate/migrate/releases/download/v4.19.1/migrate.$MIGRATE_TARGET_ARCH.tar.gz | tar xvz && \
-    mv migrate /usr/bin/migrate
+
+COPY --from=migrate-bin /usr/local/bin/migrate /usr/bin/migrate
 
 COPY --from=builder --chown=nextjs:nodejs /app/web/next.config.mjs .
 COPY --from=builder --chown=nextjs:nodejs /app/web/package.json .

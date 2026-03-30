@@ -1,11 +1,11 @@
 # The node alpine image is available here: https://github.com/nodejs/docker-node
 FROM --platform=${TARGETPLATFORM:-linux/amd64} node:24-alpine AS alpine
+FROM node:24-alpine AS proxy-base
 
-ARG HTTP_PROXY=http://proxy-chain.intel.com:915
-ARG HTTPS_PROXY=http://proxy-chain.intel.com:915
-ARG NO_PROXY=localhost,127.0.0.1,::1,.intel.com
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 
-# Persist to runtime env (both cases for broad tool compatibility)
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     NO_PROXY=${NO_PROXY} \
@@ -13,11 +13,16 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
     no_proxy=${NO_PROXY}
 
+# npm must be explicitly configured behind corporate proxies
+RUN npm config set proxy "$HTTP_PROXY" \
+ && npm config set https-proxy "$HTTPS_PROXY" \
+ && npm config set strict-ssl false
+
 # It's important to update the index before installing packages to ensure you're getting the latest versions.
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk update && apk upgrade --no-cache libcrypto3 libssl3 libc6-compat busybox ssl_client zlib
 
-FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine AS base
+FROM --platform=${TARGETPLATFORM:-linux/amd64} alpine AS build-base
 RUN npm install turbo@2.8.13 --global
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
