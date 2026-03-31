@@ -15,19 +15,56 @@ const orgUsageInput = z.object({
   toTimestamp: z.string().datetime(),
 });
 
-/** Resolve project IDs for an org (or all projects when orgId === "all") */
+/** Resolve project IDs for an org (or all projects when orgId === "all").
+ *  If `allowedOrgIds` is provided, restricts the "all" case to those orgs only. */
 async function resolveProjectIds(
   prisma: typeof _prisma,
   orgId: string,
+  allowedOrgIds?: string[],
 ): Promise<string[]> {
+  const orgFilter =
+    orgId !== "all"
+      ? { orgId }
+      : allowedOrgIds
+        ? { orgId: { in: allowedOrgIds } }
+        : {};
   const projects = await prisma.project.findMany({
-    where: {
-      deletedAt: null,
-      ...(orgId !== "all" ? { orgId } : {}),
-    },
+    where: { deletedAt: null, ...orgFilter },
     select: { id: true },
   });
   return projects.map((p) => p.id);
+}
+
+/**
+ * For non-admin users, returns the list of org IDs they own.
+ * Throws FORBIDDEN if they have no owned orgs.
+ * For global admins, returns null (no restriction).
+ */
+function getOwnedOrgIds(user: {
+  isOrgDashboardAdmin: boolean;
+  organizations: { id: string; role: string }[];
+}): string[] | null {
+  if (user.isOrgDashboardAdmin) return null;
+  const ownedOrgIds = user.organizations
+    .filter((o) => o.role === "OWNER")
+    .map((o) => o.id);
+  return ownedOrgIds;
+}
+
+/**
+ * Validates that a requested orgId is accessible to the user.
+ * Throws FORBIDDEN if the user (non-admin) requests an org they don't own.
+ */
+function assertOrgAccess(
+  orgId: string,
+  ownedOrgIds: string[] | null,
+): void {
+  if (ownedOrgIds === null) return; // global admin, no restriction
+  if (orgId !== "all" && !ownedOrgIds.includes(orgId))
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "You are not authorized to access this organization.",
+    });
 }
 
 export const orgDashboardRouter = createTRPCRouter({
@@ -38,13 +75,37 @@ export const orgDashboardRouter = createTRPCRouter({
         message: "Your account is not authorized to access the org dashboard.",
       });
 
-    const [totalOrgs, totalProjects, totalMembers] = await Promise.all([
-      ctx.prisma.organization.count(),
-      ctx.prisma.project.count({ where: { deletedAt: null } }),
-      ctx.prisma.organizationMembership.count(),
-    ]);
+    const isGlobalAdmin = ctx.session.user.isOrgDashboardAdmin;
 
-    return { totalOrgs, totalProjects, totalMembers };
+    if (isGlobalAdmin) {
+      const [totalOrgs, totalProjects, totalMembers] = await Promise.all([
+        ctx.prisma.organization.count(),
+        ctx.prisma.project.count({ where: { deletedAt: null } }),
+        ctx.prisma.organizationMembership.count(),
+      ]);
+      return { totalOrgs, totalProjects, totalMembers };
+    }
+
+    // Org owner: scope to owned orgs only
+    const ownedOrgIds = ctx.session.user.organizations
+      .filter((o) => o.role === "OWNER")
+      .map((o) => o.id);
+    if (ownedOrgIds.length === 0)
+      throw new TRPCError({ code: "FORBIDDEN" });
+
+    const [totalProjects, totalMembers] = await Promise.all([
+      ctx.prisma.project.count({
+        where: { deletedAt: null, orgId: { in: ownedOrgIds } },
+      }),
+      ctx.prisma.organizationMembership.count({
+        where: { orgId: { in: ownedOrgIds } },
+      }),
+    ]);
+    return {
+      totalOrgs: ownedOrgIds.length,
+      totalProjects,
+      totalMembers,
+    };
   }),
 
   orgList: authenticatedProcedure.query(async ({ ctx }) => {
@@ -54,7 +115,18 @@ export const orgDashboardRouter = createTRPCRouter({
         message: "Your account is not authorized to access the org dashboard.",
       });
 
+    const isGlobalAdmin = ctx.session.user.isOrgDashboardAdmin;
+    const ownedOrgIds = isGlobalAdmin
+      ? null
+      : ctx.session.user.organizations
+          .filter((o) => o.role === "OWNER")
+          .map((o) => o.id);
+
+    if (!isGlobalAdmin && (!ownedOrgIds || ownedOrgIds.length === 0))
+      throw new TRPCError({ code: "FORBIDDEN" });
+
     const orgs = await ctx.prisma.organization.findMany({
+      where: ownedOrgIds ? { id: { in: ownedOrgIds } } : {},
       include: {
         _count: {
           select: {
@@ -89,7 +161,14 @@ export const orgDashboardRouter = createTRPCRouter({
       if (!ctx.session.user.canViewOrgDashboard)
         throw new TRPCError({ code: "FORBIDDEN" });
 
-      const projectIds = await resolveProjectIds(ctx.prisma, input.orgId);
+      const ownedOrgIds = getOwnedOrgIds(ctx.session.user);
+      assertOrgAccess(input.orgId, ownedOrgIds);
+
+      const projectIds = await resolveProjectIds(
+        ctx.prisma,
+        input.orgId,
+        ownedOrgIds ?? undefined,
+      );
       if (projectIds.length === 0)
         return { totalTraces: 0, totalTokens: 0, totalCost: 0, uniqueModels: 0 };
 
@@ -147,11 +226,18 @@ export const orgDashboardRouter = createTRPCRouter({
       if (!ctx.session.user.canViewOrgDashboard)
         throw new TRPCError({ code: "FORBIDDEN" });
 
+      const ownedOrgIds = getOwnedOrgIds(ctx.session.user);
+      assertOrgAccess(input.orgId, ownedOrgIds);
+
+      const orgFilter =
+        input.orgId !== "all"
+          ? { orgId: input.orgId }
+          : ownedOrgIds
+            ? { orgId: { in: ownedOrgIds } }
+            : {};
+
       const projects = await ctx.prisma.project.findMany({
-        where: {
-          deletedAt: null,
-          ...(input.orgId !== "all" ? { orgId: input.orgId } : {}),
-        },
+        where: { deletedAt: null, ...orgFilter },
         select: { id: true, name: true },
       });
 
@@ -203,7 +289,14 @@ export const orgDashboardRouter = createTRPCRouter({
       if (!ctx.session.user.canViewOrgDashboard)
         throw new TRPCError({ code: "FORBIDDEN" });
 
-      const projectIds = await resolveProjectIds(ctx.prisma, input.orgId);
+      const ownedOrgIds = getOwnedOrgIds(ctx.session.user);
+      assertOrgAccess(input.orgId, ownedOrgIds);
+
+      const projectIds = await resolveProjectIds(
+        ctx.prisma,
+        input.orgId,
+        ownedOrgIds ?? undefined,
+      );
       if (projectIds.length === 0) return [];
 
       const rows = await executeQuery(projectIds, {
@@ -244,7 +337,14 @@ export const orgDashboardRouter = createTRPCRouter({
       if (!ctx.session.user.canViewOrgDashboard)
         throw new TRPCError({ code: "FORBIDDEN" });
 
-      const projectIds = await resolveProjectIds(ctx.prisma, input.orgId);
+      const ownedOrgIds = getOwnedOrgIds(ctx.session.user);
+      assertOrgAccess(input.orgId, ownedOrgIds);
+
+      const projectIds = await resolveProjectIds(
+        ctx.prisma,
+        input.orgId,
+        ownedOrgIds ?? undefined,
+      );
       if (projectIds.length === 0) return [];
 
       const [costRows, traceRows] = await Promise.all([

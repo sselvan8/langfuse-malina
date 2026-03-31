@@ -166,6 +166,7 @@ const staticProviders: Provider[] = [
         featureFlags: parseFlags(dbUser.featureFlags),
         canCreateOrganizations: canCreateOrganizationsWithCustomCheck(dbUser.email, undefined),
         canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(undefined),
+        isOrgDashboardAdmin: isEmailInCustomOrgCreatorWhitelist(undefined),
         organizations: [],
       };
 
@@ -784,9 +785,14 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                       dbUser.email,
                       token.azureRoles,
                     ),
-                    canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(
+                    isOrgDashboardAdmin: isEmailInCustomOrgCreatorWhitelist(
                       token.azureRoles,
                     ),
+                    canViewOrgDashboard:
+                      isEmailInCustomOrgCreatorWhitelist(token.azureRoles) ||
+                      dbUser.organizationMemberships.some(
+                        (m) => m.role === "OWNER",
+                      ),
                     organizations: dbUser.organizationMemberships.map(
                       (orgMembership) => {
                         const parsedCloudConfig = CloudConfigSchema.safeParse(

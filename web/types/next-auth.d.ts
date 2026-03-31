@@ -36,7 +36,8 @@ declare module "next-auth" {
     v4BetaEnabled?: boolean;
     emailVerified?: string | null; // iso datetime string, need to stringify as JWT & useSession do not support Date objects
     canCreateOrganizations: boolean; // default true, allowlist can be set via LANGFUSE_ALLOWED_ORGANIZATION_CREATORS
-    canViewOrgDashboard: boolean;
+    canViewOrgDashboard: boolean; // true for Azure SSO org creators OR org owners
+    isOrgDashboardAdmin: boolean; // true only for Azure SSO org creators (unrestricted global view)
     organizations: {
       id: PrismaOrganization["id"];
       name: PrismaOrganization["name"];
