@@ -368,18 +368,6 @@ export const env = createEnv({
     LANGFUSE_AI_FEATURES_SECRET_KEY: z.string().optional(),
     LANGFUSE_AI_FEATURES_PROJECT_ID: z.string().optional(),
 
-    CUSTOM_ORG_CREATOR_WHITELIST: z
-      .string()
-      .optional()
-      .refine((value) => {
-        if (!value) return true;
-        const creators = value.split(",");
-        const emailSchema = z.string().email();
-        return creators.every((creator) =>
-          emailSchema.safeParse(creator.trim()).success
-        );
-      }, "CUSTOM_ORG_CREATOR_WHITELIST must be a comma-separated list of valid email addresses"),
-	
     // API Performance Flags
     // Enable Redis-based tracking of projects using OTEL API to optimize ClickHouse queries.
     // When enabled, projects ingesting via OTEL API skip the FINAL modifier on some observations queries for better performance.
@@ -751,8 +739,6 @@ export const env = createEnv({
     // Langfuse Tracing AI Features
     LANGFUSE_AI_FEATURES_HOST: process.env.LANGFUSE_AI_FEATURES_HOST,
 
-    CUSTOM_ORG_CREATOR_WHITELIST: process.env.CUSTOM_ORG_CREATOR_WHITELIST,
-	  
     // Api Performance Flags
     LANGFUSE_API_CLICKHOUSE_PROPAGATE_OBSERVATIONS_TIME_BOUNDS:
       process.env.LANGFUSE_API_CLICKHOUSE_PROPAGATE_OBSERVATIONS_TIME_BOUNDS,

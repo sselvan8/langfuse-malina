@@ -1,56 +1,26 @@
-import { env } from "@/src/env.mjs";
 import { TRPCError } from "@trpc/server";
 
-// Parse the custom whitelist from environment
-const CUSTOM_ORG_CREATOR_WHITELIST = process.env.CUSTOM_ORG_CREATOR_WHITELIST
-  ? process.env.CUSTOM_ORG_CREATOR_WHITELIST.toLowerCase()
-      .split(",")
-      .map((email) => email.trim())
-  : null;
-
 /**
- * Check if user email is in custom organization creator whitelist
- * This is a custom addition on top of the existing canCreateOrganizations permission
+ * Check if user has the Azure AD OrgCreator app role.
+ * Members of the malina-admins Azure AD group are assigned this role,
+ * which is included as a `roles` claim in the ID token.
  */
-export function checkCustomOrgCreatorWhitelist(userEmail: string | null): void {
-  // If no custom whitelist is set, allow (rely on existing canCreateOrganizations)
-  if (!CUSTOM_ORG_CREATOR_WHITELIST) {
-    return;
-  }
-
-  // If whitelist is set, enforce it
-  if (!userEmail) {
+export function checkCustomOrgCreatorWhitelist(azureRoles?: string[]): void {
+  if (!azureRoles || azureRoles.length === 0) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "Email is required to create organizations",
-    });
-  }
-
-  const emailLower = userEmail.toLowerCase().trim();
-  if (!CUSTOM_ORG_CREATOR_WHITELIST.includes(emailLower)) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Your email is not authorized to create organizations. Please contact your administrator.",
+      message:
+        "Your account is not authorized to create organizations. Please contact your administrator.",
     });
   }
 }
 
 /**
- * Check if a user email is allowed to create organizations
- * This is used in the UI to conditionally show/hide the create organization button
+ * Returns true if the user has been assigned the OrgCreator Azure AD app role.
+ * Used in the UI to conditionally show/hide the create organization button and org dashboard.
  */
 export function isEmailInCustomOrgCreatorWhitelist(
-  userEmail: string | null
+  azureRoles?: string[]
 ): boolean {
-  // If no custom whitelist is set, allow (rely on existing canCreateOrganizations)
-  if (!CUSTOM_ORG_CREATOR_WHITELIST) {
-    return true;
-  }
-
-  if (!userEmail) {
-    return false;
-  }
-
-  const emailLower = userEmail.toLowerCase().trim();
-  return CUSTOM_ORG_CREATOR_WHITELIST.includes(emailLower);
+  return (azureRoles?.length ?? 0) > 0;
 }

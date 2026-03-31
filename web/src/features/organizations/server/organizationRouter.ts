@@ -17,7 +17,6 @@ import { createBillingServiceFromContext } from "@/src/ee/features/billing/serve
 import { isCloudBillingEnabled } from "@/src/ee/features/billing/utils/isCloudBilling";
 
 import { env } from "@/src/env.mjs";
-import { checkCustomOrgCreatorWhitelist } from "./customOrgCreationMiddleware";
 
 export const organizationsRouter = createTRPCRouter({
   create: authenticatedProcedure
@@ -28,14 +27,6 @@ export const organizationsRouter = createTRPCRouter({
           code: "FORBIDDEN",
           message: "You do not have permission to create organizations",
         });
-
-      if (!ctx.session.user.email)
-	throw new TRPCError({
-    	  code: "FORBIDDEN",
-          message: "User email is required to create organizations",
-        });
-    	
-      checkCustomOrgCreatorWhitelist(ctx.session.user.email);
 
       const organization = await ctx.prisma.organization.create({
         data: {
