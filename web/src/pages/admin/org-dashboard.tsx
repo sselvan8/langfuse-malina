@@ -1,5 +1,5 @@
 import { useSession } from "next-auth/react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { api } from "@/src/utils/api";
 import { ErrorPage } from "@/src/components/error-page";
 import ContainerPage from "@/src/components/layouts/container-page";
@@ -30,6 +30,7 @@ export default function OrgDashboardPage() {
   const { timeRange, setTimeRange } = useDashboardDateRange();
 
   const hasAccess = Boolean(session?.user?.canViewOrgDashboard);
+  const isOrgAdmin = Boolean(session?.user?.isOrgDashboardAdmin);
 
   const absoluteTimeRange = useMemo(
     () => toAbsoluteTimeRange(timeRange),
@@ -54,6 +55,13 @@ export default function OrgDashboardPage() {
   const orgsQuery = api.orgDashboard.orgList.useQuery(undefined, {
     enabled: hasAccess,
   });
+
+  // For org owners with a single org, auto-select their org
+  useEffect(() => {
+    if (!isOrgAdmin && orgsQuery.data?.length === 1) {
+      setSelectedOrgId(orgsQuery.data[0].id);
+    }
+  }, [isOrgAdmin, orgsQuery.data]);
 
   const usageMetrics = api.orgDashboard.orgUsageMetrics.useQuery(
     usageInput!,
@@ -110,22 +118,33 @@ export default function OrgDashboardPage() {
     >
       {/* Controls bar */}
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground">
-          Organization:
-        </span>
-        <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="All Organizations" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Organizations</SelectItem>
-            {orgsQuery.data?.map((org) => (
-              <SelectItem key={org.id} value={org.id}>
-                {org.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Show org selector when admin has multiple orgs, or org owner has multiple owned orgs */}
+        {(isOrgAdmin || (orgsQuery.data && orgsQuery.data.length > 1)) && (
+          <>
+            <span className="text-sm font-medium text-muted-foreground">
+              Organization:
+            </span>
+            <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+              <SelectTrigger className="w-56">
+                <SelectValue
+                  placeholder={
+                    isOrgAdmin ? "All Organizations" : "All My Organizations"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {isOrgAdmin ? "All Organizations" : "All My Organizations"}
+                </SelectItem>
+                {orgsQuery.data?.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>
+                    {org.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
 
         <span className="text-sm font-medium text-muted-foreground">
           Date range:
