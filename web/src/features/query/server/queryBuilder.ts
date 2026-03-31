@@ -416,7 +416,7 @@ export class QueryBuilder {
   private addStandardFilters(
     filterList: FilterList,
     view: ViewDeclarationType,
-    projectId: string,
+    projectId: string | string[],
     fromTimestamp: string,
     toTimestamp: string,
   ) {
@@ -441,18 +441,31 @@ export class QueryBuilder {
       type: "datetime",
     };
 
-    // Add project_id filter
-    const projectIdFilter = createFilterFromFilterState(
-      [
-        {
-          column: "project_id",
-          operator: "=",
-          value: projectId,
-          type: "string",
-        },
-      ],
-      [projectIdMapping],
-    );
+    // Add project_id filter — single value uses "=" (index-friendly), array uses "any of" (IN)
+    const projectIdFilter =
+      typeof projectId === "string"
+        ? createFilterFromFilterState(
+            [
+              {
+                column: "project_id",
+                operator: "=",
+                value: projectId,
+                type: "string",
+              },
+            ],
+            [projectIdMapping],
+          )
+        : createFilterFromFilterState(
+            [
+              {
+                column: "project_id",
+                operator: "any of",
+                value: projectId,
+                type: "stringOptions",
+              },
+            ],
+            [{ ...projectIdMapping, type: "stringOptions" }],
+          );
 
     // Add fromTimestamp filter
     const fromFilter = createFilterFromFilterState(
@@ -1234,7 +1247,7 @@ export class QueryBuilder {
    */
   public async build(
     query: QueryType,
-    projectId: string,
+    projectId: string | string[],
     enableSingleLevelOptimization: boolean = false,
   ): Promise<{ query: string; parameters: Record<string, unknown> }> {
     // Run zod validation
@@ -1249,7 +1262,10 @@ export class QueryBuilder {
     const parameters: Record<string, unknown> = {};
 
     // Check if we should skip FINAL modifier for observations (OTEL optimization)
-    const skipObservationsFinal = await shouldSkipObservationsFinal(projectId);
+    // For multi-project queries, use the first project ID as a representative heuristic
+    const skipObservationsFinal = await shouldSkipObservationsFinal(
+      typeof projectId === "string" ? projectId : (projectId[0] ?? ""),
+    );
     let view = this.getViewDeclaration(query.view);
 
     // Events table never needs FINAL modifier (already deduplicated)
@@ -1373,7 +1389,9 @@ export class QueryBuilder {
           ` OR NOT EXISTS (${subquery} LIMIT 1))`;
         parameters[fromP] = new Date(query.fromTimestamp).getTime();
         parameters[toP] = new Date(query.toTimestamp).getTime();
-        parameters[projP] = projectId;
+        // rootEventCondition subquery uses a single project_id; skip for multi-project
+        parameters[projP] =
+          typeof projectId === "string" ? projectId : (projectId[0] ?? "");
       }
     }
 

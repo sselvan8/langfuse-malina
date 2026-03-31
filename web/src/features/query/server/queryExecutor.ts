@@ -26,7 +26,7 @@ export type PreparedQuery = {
 };
 
 export async function prepareExecuteQuery(opts: {
-  projectId: string;
+  projectId: string | string[];
   query: QueryType;
   version?: ViewVersion;
   enableSingleLevelOptimization?: boolean;
@@ -59,7 +59,8 @@ export async function prepareExecuteQuery(opts: {
     feature: "custom-queries",
     type: query.view,
     kind: "analytic",
-    projectId,
+    projectId:
+      typeof projectId === "string" ? projectId : projectId.join(","),
   };
 
   const clickhouseSettings: Record<string, string> = {
@@ -96,7 +97,7 @@ export function toClickhouseQueryOpts(
 }
 
 export async function executeQuery(
-  projectId: string,
+  projectId: string | string[],
   query: QueryType,
   version: ViewVersion = "v1",
   enableSingleLevelOptimization: boolean = false,
@@ -116,7 +117,7 @@ export async function executeQuery(
 
   return measureAndReturn({
     operationName: "executeQuery",
-    projectId,
+    projectId: typeof projectId === "string" ? projectId : (projectId[0] ?? ""),
     input: {
       query: prepared.compiledQuery,
       params: prepared.parameters,

@@ -1,8 +1,26 @@
-import { Building2, FolderOpen, Users } from "lucide-react";
+import {
+  Building2,
+  FolderOpen,
+  Users,
+  Activity,
+  Coins,
+  DollarSign,
+  BrainCircuit,
+} from "lucide-react";
 import { type LucideIcon } from "lucide-react";
+import { compactNumberFormatter, usdFormatter } from "@/src/utils/numbers";
 
 type Summary =
   | { totalOrgs: number; totalProjects: number; totalMembers: number }
+  | undefined;
+
+type UsageMetrics =
+  | {
+      totalTraces: number;
+      totalTokens: number;
+      totalCost: number;
+      uniqueModels: number;
+    }
   | undefined;
 
 function SummaryTile({
@@ -12,7 +30,7 @@ function SummaryTile({
   isLoading,
 }: {
   name: string;
-  value: number | undefined;
+  value: string | undefined;
   icon: LucideIcon;
   isLoading: boolean;
 }) {
@@ -27,7 +45,7 @@ function SummaryTile({
             {name}
           </dt>
           <dd className="mt-0.5 text-3xl font-semibold tracking-tight text-primary">
-            {isLoading ? "—" : (value?.toLocaleString() ?? "0")}
+            {isLoading ? "—" : (value ?? "0")}
           </dd>
         </div>
       </div>
@@ -38,30 +56,82 @@ function SummaryTile({
 export function OrgDashboardSummaryTiles({
   summary,
   isLoading,
+  usageMetrics,
+  isUsageLoading,
 }: {
   summary: Summary;
   isLoading: boolean;
+  usageMetrics?: UsageMetrics;
+  isUsageLoading?: boolean;
 }) {
   return (
-    <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <SummaryTile
-        name="Organizations"
-        value={summary?.totalOrgs}
-        icon={Building2}
-        isLoading={isLoading}
-      />
-      <SummaryTile
-        name="Projects"
-        value={summary?.totalProjects}
-        icon={FolderOpen}
-        isLoading={isLoading}
-      />
-      <SummaryTile
-        name="Members"
-        value={summary?.totalMembers}
-        icon={Users}
-        isLoading={isLoading}
-      />
-    </dl>
+    <div className="space-y-4">
+      {/* Structural tiles (always fast) */}
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <SummaryTile
+          name="Organizations"
+          value={summary?.totalOrgs?.toLocaleString()}
+          icon={Building2}
+          isLoading={isLoading}
+        />
+        <SummaryTile
+          name="Projects"
+          value={summary?.totalProjects?.toLocaleString()}
+          icon={FolderOpen}
+          isLoading={isLoading}
+        />
+        <SummaryTile
+          name="Members"
+          value={summary?.totalMembers?.toLocaleString()}
+          icon={Users}
+          isLoading={isLoading}
+        />
+      </dl>
+
+      {/* Usage metric tiles (ClickHouse, date-scoped) */}
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <SummaryTile
+          name="Total Traces"
+          value={
+            usageMetrics
+              ? compactNumberFormatter(usageMetrics.totalTraces)
+              : undefined
+          }
+          icon={Activity}
+          isLoading={isUsageLoading ?? false}
+        />
+        <SummaryTile
+          name="Total Tokens"
+          value={
+            usageMetrics
+              ? compactNumberFormatter(usageMetrics.totalTokens)
+              : undefined
+          }
+          icon={Coins}
+          isLoading={isUsageLoading ?? false}
+        />
+        <SummaryTile
+          name="Total Cost"
+          value={
+            usageMetrics
+              ? usdFormatter(usageMetrics.totalCost, 2, 2)
+              : undefined
+          }
+          icon={DollarSign}
+          isLoading={isUsageLoading ?? false}
+        />
+        <SummaryTile
+          name="Models Used"
+          value={
+            usageMetrics
+              ? String(usageMetrics.uniqueModels)
+              : undefined
+          }
+          icon={BrainCircuit}
+          isLoading={isUsageLoading ?? false}
+        />
+      </dl>
+    </div>
   );
 }
+
