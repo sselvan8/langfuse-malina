@@ -86,15 +86,18 @@ function canCreateOrganizations(userEmail: string | null): boolean {
   return allowedOrgCreators.includes(userEmail.toLowerCase());
 }
 
-function canCreateOrganizationsWithCustomCheck(userEmail: string | null): boolean {
+function canCreateOrganizationsWithCustomCheck(
+  userEmail: string | null,
+  azureRoles?: string[],
+): boolean {
   // First check the licensed entitlement logic
   const hasBasePermission = canCreateOrganizations(userEmail);
 
   // If base permission fails, return false
   if (!hasBasePermission) return false;
 
-  // Then check custom whitelist (your additional layer)
-  return isEmailInCustomOrgCreatorWhitelist(userEmail);
+  // Then check Azure AD app role (OrgCreator role assigned via malina-admins group)
+  return isEmailInCustomOrgCreatorWhitelist(azureRoles);
 }
 
 const staticProviders: Provider[] = [
@@ -161,8 +164,8 @@ const staticProviders: Provider[] = [
         image: dbUser.image,
         emailVerified: dbUser.emailVerified?.toISOString(),
         featureFlags: parseFlags(dbUser.featureFlags),
-        canCreateOrganizations: canCreateOrganizationsWithCustomCheck(dbUser.email),
-        canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(dbUser.email),
+        canCreateOrganizations: canCreateOrganizationsWithCustomCheck(dbUser.email, undefined),
+        canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(undefined),
         organizations: [],
       };
 
@@ -702,6 +705,16 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
       maxAge: env.AUTH_SESSION_MAX_AGE * 60, // convert minutes to seconds, default is set in env.mjs
     },
     callbacks: {
+      async jwt({ token, account, profile }) {
+        // Capture Azure AD app roles from the ID token on initial sign-in.
+        // These are set by assigning the OrgCreator app role to the malina-admins group
+        // in Azure AD Enterprise Applications → Users and groups.
+        if (account?.provider === "azure-ad" && profile) {
+          const azureProfile = profile as { roles?: string[] };
+          token.azureRoles = azureProfile.roles ?? [];
+        }
+        return token;
+      },
       async session({ session, token }): Promise<Session> {
         return instrumentAsync({ name: "next-auth-session" }, async () => {
           const dbUser = await prisma.user.findUnique({
@@ -769,9 +782,10 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
                     admin: dbUser.admin,
                     canCreateOrganizations: canCreateOrganizationsWithCustomCheck(
                       dbUser.email,
+                      token.azureRoles,
                     ),
                     canViewOrgDashboard: isEmailInCustomOrgCreatorWhitelist(
-                      dbUser.email,
+                      token.azureRoles,
                     ),
                     organizations: dbUser.organizationMemberships.map(
                       (orgMembership) => {
