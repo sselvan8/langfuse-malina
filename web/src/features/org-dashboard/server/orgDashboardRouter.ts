@@ -2,11 +2,15 @@ import {
   createTRPCRouter,
   authenticatedProcedure,
 } from "@/src/server/api/trpc";
-import { checkCustomOrgCreatorWhitelist } from "@/src/features/organizations/server/customOrgCreationMiddleware";
+import { TRPCError } from "@trpc/server";
 
 export const orgDashboardRouter = createTRPCRouter({
   summary: authenticatedProcedure.query(async ({ ctx }) => {
-    checkCustomOrgCreatorWhitelist(ctx.session.user.email ?? null);
+    if (!ctx.session.user.canViewOrgDashboard)
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Your account is not authorized to access the org dashboard.",
+      });
 
     const [totalOrgs, totalProjects, totalMembers] = await Promise.all([
       ctx.prisma.organization.count(),
@@ -18,7 +22,11 @@ export const orgDashboardRouter = createTRPCRouter({
   }),
 
   orgList: authenticatedProcedure.query(async ({ ctx }) => {
-    checkCustomOrgCreatorWhitelist(ctx.session.user.email ?? null);
+    if (!ctx.session.user.canViewOrgDashboard)
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Your account is not authorized to access the org dashboard.",
+      });
 
     const orgs = await ctx.prisma.organization.findMany({
       include: {
