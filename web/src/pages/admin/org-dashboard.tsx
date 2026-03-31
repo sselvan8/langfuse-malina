@@ -13,12 +13,39 @@ import {
 } from "@/src/components/ui/select";
 import { OrgDashboardSummaryTiles } from "@/src/features/org-dashboard/components/OrgDashboardSummaryTiles";
 import { OrgDashboardOrgCard } from "@/src/features/org-dashboard/components/OrgDashboardOrgCard";
+import { OrgDashboardProjectBreakdownTable } from "@/src/features/org-dashboard/components/OrgDashboardProjectBreakdownTable";
+import { OrgDashboardModelBreakdownTable } from "@/src/features/org-dashboard/components/OrgDashboardModelBreakdownTable";
+import { OrgDashboardTopUsersChart } from "@/src/features/org-dashboard/components/OrgDashboardTopUsersChart";
+import { useDashboardDateRange } from "@/src/hooks/useDashboardDateRange";
+import { DashboardDateRangeDropdown } from "@/src/components/date-range-dropdowns";
+import {
+  toAbsoluteTimeRange,
+  DASHBOARD_AGGREGATION_PLACEHOLDER,
+  type DashboardDateRangeOptions,
+} from "@/src/utils/date-range-utils";
 
 export default function OrgDashboardPage() {
   const { data: session, status } = useSession();
   const [selectedOrgId, setSelectedOrgId] = useState<string>("all");
+  const { timeRange, setTimeRange } = useDashboardDateRange();
 
   const hasAccess = Boolean(session?.user?.canViewOrgDashboard);
+
+  const absoluteTimeRange = useMemo(
+    () => toAbsoluteTimeRange(timeRange),
+    [timeRange],
+  );
+
+  const usageEnabled =
+    hasAccess && absoluteTimeRange !== null;
+
+  const usageInput = usageEnabled
+    ? {
+        orgId: selectedOrgId,
+        fromTimestamp: absoluteTimeRange.from.toISOString(),
+        toTimestamp: absoluteTimeRange.to.toISOString(),
+      }
+    : null;
 
   const summary = api.orgDashboard.summary.useQuery(undefined, {
     enabled: hasAccess,
@@ -27,6 +54,26 @@ export default function OrgDashboardPage() {
   const orgsQuery = api.orgDashboard.orgList.useQuery(undefined, {
     enabled: hasAccess,
   });
+
+  const usageMetrics = api.orgDashboard.orgUsageMetrics.useQuery(
+    usageInput!,
+    { enabled: !!usageInput },
+  );
+
+  const projectBreakdown = api.orgDashboard.projectBreakdown.useQuery(
+    usageInput!,
+    { enabled: !!usageInput },
+  );
+
+  const modelBreakdown = api.orgDashboard.modelBreakdown.useQuery(
+    usageInput!,
+    { enabled: !!usageInput },
+  );
+
+  const topUsers = api.orgDashboard.topUsers.useQuery(
+    usageInput!,
+    { enabled: !!usageInput },
+  );
 
   const filteredOrgs = useMemo(() => {
     if (!orgsQuery.data) return [];
@@ -57,18 +104,14 @@ export default function OrgDashboardPage() {
         title: "Org Dashboard",
         help: {
           description:
-            "Cross-organization overview showing all organizations, their projects, and member counts.",
+            "Cross-organization overview showing usage metrics, costs, and member counts.",
         },
       }}
     >
-      <OrgDashboardSummaryTiles
-        summary={summary.data}
-        isLoading={summary.isPending}
-      />
-
-      <div className="mt-6 flex items-center gap-3">
+      {/* Controls bar */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <span className="text-sm font-medium text-muted-foreground">
-          Filter by Organization:
+          Organization:
         </span>
         <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
           <SelectTrigger className="w-56">
@@ -83,9 +126,59 @@ export default function OrgDashboardPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <span className="text-sm font-medium text-muted-foreground">
+          Date range:
+        </span>
+        <DashboardDateRangeDropdown
+          selectedOption={
+            ("range" in timeRange
+              ? timeRange.range
+              : DASHBOARD_AGGREGATION_PLACEHOLDER) as DashboardDateRangeOptions
+          }
+          setDateRangeAndOption={(option, date) =>
+            setTimeRange(
+              date
+                ? { from: date.from, to: date.to }
+                : { range: option as string },
+            )
+          }
+        />
       </div>
 
+      {/* Summary tiles */}
+      <OrgDashboardSummaryTiles
+        summary={summary.data}
+        isLoading={summary.isPending}
+        usageMetrics={usageMetrics.data}
+        isUsageLoading={usageMetrics.isPending}
+      />
+
+      {/* Project + Model breakdown tables */}
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <OrgDashboardProjectBreakdownTable
+          data={projectBreakdown.data}
+          isLoading={projectBreakdown.isPending}
+        />
+        <OrgDashboardModelBreakdownTable
+          data={modelBreakdown.data}
+          isLoading={modelBreakdown.isPending}
+        />
+      </div>
+
+      {/* Top users chart */}
       <div className="mt-4">
+        <OrgDashboardTopUsersChart
+          data={topUsers.data}
+          isLoading={topUsers.isPending}
+        />
+      </div>
+
+      {/* Org cards list */}
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Organizations
+        </h2>
         {orgsQuery.isPending ? (
           <NoDataOrLoading isLoading={true} />
         ) : filteredOrgs.length === 0 ? (
@@ -101,3 +194,4 @@ export default function OrgDashboardPage() {
     </ContainerPage>
   );
 }
+
