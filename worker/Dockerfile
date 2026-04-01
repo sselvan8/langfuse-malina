@@ -1,5 +1,22 @@
 # The node alpine image is available here: https://github.com/nodejs/docker-node
 FROM --platform=${TARGETPLATFORM:-linux/amd64} node:24-alpine AS alpine
+FROM node:24-alpine AS proxy-base
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+ENV HTTP_PROXY=${HTTP_PROXY} \
+    HTTPS_PROXY=${HTTPS_PROXY} \
+    NO_PROXY=${NO_PROXY} \
+    http_proxy=${HTTP_PROXY} \
+    https_proxy=${HTTPS_PROXY} \
+    no_proxy=${NO_PROXY}
+
+# npm must be explicitly configured behind corporate proxies
+RUN npm config set proxy "$HTTP_PROXY" \
+ && npm config set https-proxy "$HTTPS_PROXY" \
+ && npm config set strict-ssl false
 
 # It's important to update the index before installing packages to ensure you're getting the latest versions.
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
