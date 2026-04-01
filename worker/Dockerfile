@@ -30,7 +30,7 @@ RUN corepack enable
 RUN corepack prepare pnpm@9.5.0 --activate
 
 
-FROM --platform=${TARGETPLATFORM:-linux/amd64} base AS pruner
+FROM --platform=${TARGETPLATFORM:-linux/amd64} build-base AS pruner
 
 WORKDIR /app
 
@@ -39,7 +39,7 @@ RUN turbo prune --scope=worker --docker
 
 
 
-FROM --platform=${TARGETPLATFORM:-linux/amd64} base AS builder
+FROM --platform=${TARGETPLATFORM:-linux/amd64} build-base AS builder
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ COPY --from=pruner /app/out/full/ .
 
 RUN turbo run build --filter=worker...
 
-FROM --platform=${TARGETPLATFORM:-linux/amd64} base AS runner
+FROM --platform=${TARGETPLATFORM:-linux/amd64} proxy-base AS runner
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
