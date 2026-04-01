@@ -27,7 +27,9 @@ import {
 export default function OrgDashboardPage() {
   const { data: session, status } = useSession();
   const [selectedOrgId, setSelectedOrgId] = useState<string>("all");
-  const { timeRange, setTimeRange } = useDashboardDateRange();
+  const { timeRange, setTimeRange } = useDashboardDateRange({
+    defaultRelativeAggregation: "last30Days",
+  });
 
   const hasAccess = Boolean(session?.user?.canViewOrgDashboard);
   const isOrgAdmin = Boolean(session?.user?.isOrgDashboardAdmin);
@@ -157,9 +159,11 @@ export default function OrgDashboardPage() {
           }
           setDateRangeAndOption={(option, date) =>
             setTimeRange(
-              date
-                ? { from: date.from, to: date.to }
-                : { range: option as string },
+              option !== DASHBOARD_AGGREGATION_PLACEHOLDER
+                ? { range: option as string }
+                : date
+                  ? { from: date.from, to: date.to }
+                  : { range: option as string },
             )
           }
         />
