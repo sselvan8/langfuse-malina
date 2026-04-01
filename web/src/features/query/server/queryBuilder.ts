@@ -429,7 +429,6 @@ export class QueryBuilder {
       clickhouseTableName: actualTableName,
       clickhouseSelect: "project_id",
       queryPrefix: actualTableName,
-      type: "string",
     };
 
     const timeDimensionMapping = {
@@ -438,7 +437,6 @@ export class QueryBuilder {
       clickhouseTableName: actualTableName,
       clickhouseSelect: view.timeDimension,
       queryPrefix: actualTableName,
-      type: "datetime",
     };
 
     // Add project_id filter — single value uses "=" (index-friendly), array uses "any of" (IN)
@@ -464,7 +462,7 @@ export class QueryBuilder {
                 type: "stringOptions",
               },
             ],
-            [{ ...projectIdMapping, type: "stringOptions" }],
+            [projectIdMapping],
           );
 
     // Add fromTimestamp filter
