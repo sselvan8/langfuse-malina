@@ -13,14 +13,14 @@ export {
 /**
  * Execute a query using the QueryBuilder.
  *
- * @param projectId - The project ID
+ * @param projectId - The project ID or array of project IDs
  * @param query - The query configuration as defined in QueryType
  * @param version - The view version to use (v1 or v2), defaults to v1
  * @param enableSingleLevelOptimization - Enable single-level SELECT optimization (default: false)
  * @returns The query result data
  */
 export async function executeQuery(
-  projectId: string,
+  projectId: string | string[],
   query: QueryType,
   version: ViewVersion = "v1",
   enableSingleLevelOptimization: boolean = false,
@@ -53,7 +53,8 @@ export async function executeQuery(
     feature: "custom-queries",
     type: query.view,
     kind: "analytic",
-    projectId,
+    projectId:
+      typeof projectId === "string" ? projectId : projectId.join(","),
   };
 
   if (!usesTraceTable) {
@@ -80,7 +81,7 @@ export async function executeQuery(
   // Use measureAndReturn for trace table queries
   return measureAndReturn({
     operationName: "executeQuery",
-    projectId,
+    projectId: typeof projectId === "string" ? projectId : (projectId[0] ?? ""),
     input: {
       query: compiledQuery,
       params: parameters,
