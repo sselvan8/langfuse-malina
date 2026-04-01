@@ -53,11 +53,9 @@ export async function executeQuery(
     feature: "custom-queries",
     type: query.view,
     kind: "analytic",
-    projectId:
-      typeof projectId === "string" ? projectId : projectId.join(","),
+    projectId,
   };
 
-<<<<<<< HEAD
   if (!usesTraceTable) {
     // No trace table placeholders, execute normally
     return queryClickhouse<Record<string, unknown>>({
@@ -77,64 +75,12 @@ export async function executeQuery(
       tags,
       preferredClickhouseService,
     });
-=======
-  const clickhouseSettings: Record<string, string> = {
-    date_time_output_format: "iso",
-    ...(env.CLICKHOUSE_USE_QUERY_CONDITION_CACHE === "true"
-      ? { use_query_condition_cache: "true" }
-      : {}),
-    max_bytes_before_external_group_by: String(
-      env.CLICKHOUSE_MAX_BYTES_BEFORE_EXTERNAL_GROUP_BY,
-    ),
-  };
-
-  return {
-    compiledQuery,
-    parameters,
-    preferredClickhouseService,
-    tags,
-    clickhouseSettings,
-    usesTraceTable: compiledQuery.includes("traces"),
-    fromTimestamp: query.fromTimestamp,
-  };
-}
-
-export function toClickhouseQueryOpts(
-  prepared: PreparedQuery,
-): Omit<ClickhouseQueryOpts, "allowLegacyEventsRead"> {
-  return {
-    query: prepared.compiledQuery,
-    params: prepared.parameters,
-    clickhouseSettings: prepared.clickhouseSettings,
-    tags: prepared.tags,
-    preferredClickhouseService: prepared.preferredClickhouseService,
-  };
-}
-
-export async function executeQuery(
-  projectId: string | string[],
-  query: QueryType,
-  version: ViewVersion = "v1",
-  enableSingleLevelOptimization: boolean = false,
-): Promise<Array<Record<string, unknown>>> {
-  const prepared = await prepareExecuteQuery({
-    projectId,
-    query,
-    version,
-    enableSingleLevelOptimization,
-  });
-
-  const chOpts = toClickhouseQueryOpts(prepared);
-
-  if (!prepared.usesTraceTable) {
-    return queryClickhouse<Record<string, unknown>>(chOpts);
->>>>>>> a44698cd9 (org Dashboard updates)
   }
 
   // Use measureAndReturn for trace table queries
   return measureAndReturn({
     operationName: "executeQuery",
-    projectId: typeof projectId === "string" ? projectId : (projectId[0] ?? ""),
+    projectId,
     input: {
       query: compiledQuery,
       params: parameters,
