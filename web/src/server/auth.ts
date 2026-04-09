@@ -6,7 +6,7 @@ import {
   type Session,
 } from "next-auth";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "@langfuse/shared/src/db";
+import { prisma, Role } from "@langfuse/shared/src/db";
 import {
   hashPassword,
   verifyPassword,
@@ -686,6 +686,56 @@ const extendedPrismaAdapter: Adapter = {
 };
 
 /**
+ * Auto-provisions MEMBER-level access to the CTH_AI project for any Azure AD user
+ * who has been assigned the "CTH_AI_Member" app role (via the Azure group).
+ * Uses NONE org role so they have no org-level permissions; project membership
+ * provides scoped MEMBER access to CTH_AI only.
+ * All upserts are no-ops if membership already exists, preserving any manual role changes.
+ */
+async function provisionCthAiProjectAccess(userEmail: string): Promise<void> {
+  const projectId = env.LANGFUSE_CTH_AI_PROJECT_ID;
+  if (!projectId) return;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId, deletedAt: null },
+    select: { id: true, orgId: true },
+  });
+  if (!project) {
+    logger.warn("CTH_AI project not found for auto-provisioning", { projectId });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: userEmail.toLowerCase() },
+    select: { id: true },
+  });
+  if (!user) {
+    logger.warn("User not found for CTH_AI provisioning", { userEmail });
+    return;
+  }
+
+  // Ensure org membership exists with NONE role so the user has no org-level access.
+  // Project membership below grants scoped MEMBER access to CTH_AI specifically.
+  const orgMembership = await prisma.organizationMembership.upsert({
+    where: { orgId_userId: { orgId: project.orgId, userId: user.id } },
+    update: {}, // No-op: preserve any existing role set by admins
+    create: { orgId: project.orgId, userId: user.id, role: Role.NONE },
+  });
+
+  // Upsert MEMBER project membership for CTH_AI
+  await prisma.projectMembership.upsert({
+    where: { projectId_userId: { projectId: project.id, userId: user.id } },
+    update: {}, // No-op: preserve any existing role set by admins
+    create: {
+      userId: user.id,
+      orgMembershipId: orgMembership.id,
+      projectId: project.id,
+      role: Role.MEMBER,
+    },
+  });
+}
+
+/**
  * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
  *
  * @see https://next-auth.js.org/configuration/options
@@ -713,6 +763,22 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
         if (account?.provider === "azure-ad" && profile) {
           const azureProfile = profile as { roles?: string[] };
           token.azureRoles = azureProfile.roles ?? [];
+
+          // CTH_AI: auto-provision MEMBER access for members of the CTH_AI Azure group.
+          // The "CTH_AI_Member" app role is assigned to the group in Azure AD
+          // Enterprise Applications → Users and groups.
+          if (
+            azureProfile.roles?.includes("CTH_AI_Member") &&
+            env.LANGFUSE_CTH_AI_PROJECT_ID &&
+            token.email
+          ) {
+            try {
+              await provisionCthAiProjectAccess(token.email);
+            } catch (e) {
+              logger.error("Failed to provision CTH_AI project access", e);
+              traceException(e);
+            }
+          }
         }
         return token;
       },
