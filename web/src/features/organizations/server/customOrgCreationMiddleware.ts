@@ -7,5 +7,5 @@
 export function isEmailInCustomOrgCreatorWhitelist(
   azureRoles?: string[]
 ): boolean {
-  return (azureRoles?.length ?? 0) > 0;
+  return azureRoles?.includes("OrgCreator") ?? false;
 }
